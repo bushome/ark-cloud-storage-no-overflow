@@ -22,7 +22,7 @@ There have also been several backend performance improvements. And will list the
 
 - Negative writes: Prisma upsert increment, can go below 0 -> Raw UPDATE … WHERE amount >= cost.
 
-- Crafting traffic: One DB write per websocket update -> configurable coalesce write queue per clusterId:ownerId:resourceId (100ms by default, tune with `INVENTORY_BATCH_WINDOW_MS`). Batch jobbing. Crafts (IE withdraw requests) and deposits also never overlap on the same row.
+- Crafting traffic: One DB write per websocket update -> configurable coalesce write queue per clusterId:ownerId:resourceId (100ms by default, tune with `Inventory.BatchWindowMs` in `config.json`). Batch jobbing. Crafts (IE withdraw requests) and deposits also never overlap on the same row.
 
   Widening this reduces (but doesn't eliminate) duplication overage under heavy concurrent load — it's a tuning knob, not a fix, and legitimate crafts start stalling if you push it too far. Values above ~250ms required manual craft restarts in my own testing.
 
@@ -42,9 +42,9 @@ There have also been several backend performance improvements. And will list the
 
 ### Database connection: now via config.json, not .env (READ THIS IF UPGRADING)
 
-**Breaking change if you're upgrading from an earlier version of this variant.** The running app no longer reads `DATABASE_URL` (or a `connection_limit` query param on it) at all — that's now only used by the Prisma CLI itself (`prisma generate`, schema tooling), not by the app at runtime.
+**Breaking change if you're upgrading from an earlier version of this variant.** The running app no longer reads `DATABASE_URL`, or any `.env` file at all — `.env` and `@nestjs/config` have been removed from the project entirely. All runtime configuration, including database connection details, now comes from `config.json`.
 
-Instead, drop a `config.json` next to the compiled app (`dist/main.js`) with your MySQL connection details:
+Drop a `config.json` next to the compiled app (`dist/main.js`) with your MySQL connection details:
 
 ```json
 {
@@ -56,13 +56,20 @@ Instead, drop a `config.json` next to the compiled app (`dist/main.js`) with you
     "Password": "your-db-password",
     "Database": "your-db-name",
     "ConnectionLimit": 50
+  },
+  "Auth": {
+    "RegisterClusters": [
+      { "ClusterId": "your-cluster-id", "Secret": "your-cluster-secret" }
+    ]
   }
 }
 ```
 
-**If you skip this, the app won't error — it'll quietly default to a local SQLite file instead of your MySQL database.** That's intentional zero-config behavior for solo players (see below), but it means an existing MySQL self-hoster who forgets this step after upgrading won't get an obvious failure, just a quietly empty new database. Double-check this file is actually in place before you trust an upgrade.
+**If you skip this, the app won't error on `MySQL` — it'll quietly default to a local SQLite file instead of your MySQL database.** That's intentional zero-config behavior for solo players (see below), but it means an existing MySQL self-hoster who forgets this step after upgrading won't get an obvious failure, just a quietly empty new database. Double-check this file is actually in place before you trust an upgrade. Note that `MySQL.User`, `MySQL.Password`, `MySQL.Database`, and at least one `Auth.RegisterClusters` entry are hard-required with no safe default if `UseMySQL: true` — the app will fail validation loudly on boot if these are missing, rather than silently proceeding.
 
 `ConnectionLimit` is the direct replacement for the old `.env`/`DATABASE_URL`'s `?connection_limit=N` — same pool-size knob, own field now. It's optional: leave it out and the `mariadb` driver's own default (10) applies instead. Large clusters will likely want it set explicitly — `50` is what this project's own production cluster runs with, given multiple crafting stations hitting the same box concurrently.
+
+**Note for `prisma generate`/schema tooling specifically**: unlike the running app, the Prisma CLI itself doesn't require a `DATABASE_URL` or `.env` file to be present at all — `npm run prisma:generate` works cleanly with neither, confirmed directly.
 
 ### New: SQLite as an alternative to MySQL
 
@@ -70,44 +77,25 @@ Alongside MySQL/MariaDB, this variant can now run on a local SQLite file instead
 
 If `config.json` is missing entirely, this is the default: a SQLite file gets created at `./data/cloudstorage.db` (relative to wherever `main.js` actually is), and there's nothing else to configure. To use MySQL instead, see the `config.json` example above (`"UseMySQL": true` plus your connection details) — the reverse also holds, `"UseMySQL": false` (or no `config.json` at all) gets you SQLite.
 
-This is early groundwork toward the drop-in Windows executable goal mentioned at the bottom of this README, more so than a fully finished feature in its own right yet — Server.Port, cluster auto-registration behavior, batch-window tuning, audit-log settings, and verbose logging are all *readable* from `config.json` already but not yet actually wired to anything; those still come from `.env`/defaults for now.
+`Server.Port`, cluster auto-registration (`Auth.RegisterClusters`), batch-window tuning (`Inventory.BatchWindowMs`), audit-log settings (`AuditLog.RetentionDays`, `AuditLog.DiscordWebhook`), and verbose logging (`Logging.Verbose`) are all fully wired to `config.json` now — no `.env` fallback exists anywhere in the running app. Optional settings fall back to sensible built-in defaults if omitted; DB credentials and at least one bootstrap cluster are hard-required with no safe default.
 
 ### Database engine: Prisma driver adapters (no more native binary)
 
 The Prisma client now runs on `@prisma/adapter-mariadb` (MySQL/MariaDB) and `@prisma/adapter-better-sqlite3` (SQLite) with `engineType = "client"` set in the schema's generator block, instead of Prisma's default native query-engine binary.
 
-Why this matters: that native binary (`query_engine-*.dll.node` on Windows) is a platform-specific compiled file that has to get regenerated in place every time you run `prisma generate` — and it can fail with a file-locking error if the app's still running when you try. Its per-platform nature was also a real headache for the eventual drop-in-exe goal mentioned at the bottom of this readme. Switching to the driver adapter gets rid of the binary entirely; the query engine now runs as plain TypeScript/WASM.
+Why this matters: that native binary (`query_engine-*.dll.node` on Windows) is a platform-specific compiled file that has to get regenerated in place every time you run `prisma generate` — and it can fail with a file-locking error if the app's still running when you try. Its per-platform nature was also a real headache for the drop-in-exe goal mentioned at the bottom of this readme. Switching to the driver adapter gets rid of the binary entirely; the query engine now runs as plain TypeScript/WASM.
 
 *The above are just the basics I'm starting with....check the change notes on releases for functional changes going foreward. Anything else I haven't touched is just a re-upload of Florian's work and will have no differences from the originals as seen from their repo.*
 
 ## Deduction Audit Log
 
-There's also a new audit-log system that isn't in upstream at all: every deduction attempt (success or fail) gets logged, along with a per-resource "theoretical max consumption rate" ceiling. A scheduled job checks recent activity against that ceiling and can fire a Discord webhook (`DUPE_ALERT_DISCORD_WEBHOOK`, optional — if you don't set it, findings still show up in the app's own log) if something blows past what's physically possible for a single crafting structure to produce, even accounting for crafting-skill stat, ClockFace multipliers, and buffs.
+There's also a new audit-log system that isn't in upstream at all: every deduction attempt (success or fail) gets logged, along with a per-resource "theoretical max consumption rate" ceiling. A scheduled job checks recent activity against that ceiling and can fire a Discord webhook (`AuditLog.DiscordWebhook` in `config.json`, optional — if you don't set it, findings still show up in the app's own log) if something blows past what's physically possible for a single crafting structure to produce, even accounting for crafting-skill stat, ClockFace multipliers, and buffs.
 
-To be upfront about what this actually catches: it's **not** dupe detection in any general sense. It can only flag consumption that's implausible for *any single structure* — it can't tell the difference between legitimate multi-station crafting and someone exploiting the concurrent-withdrawal race described below, because both look identical on the withdrawal side. In practice I've found it more useful for recovering resources lost to ARK's own transfer/vanish bugs (look up what was deducted, add it back manually) than for catching exploiters. Logs are retained 3 days by default (`AUDIT_LOG_RETENTION_DAYS`), since most issues get reported within a day.
+## Decay-Database Reconciliation (Optional Add-On)
 
-**Recovering a transfer/vanish loss:** find out exactly how much a player lost and restore it directly.
+If you're also running a decay-tracking plugin/database to manage base decay timing, you can use a SQL trigger to automatically clear a tribe's cloud storage once their base has fully decayed out from inactivity — otherwise those rows just sit there indefinitely with nothing to claim them.
 
-```sql
-SELECT * FROM DeductionAuditLog
-WHERE ownerId = ? AND resourceId = ?
-ORDER BY createdAt DESC
-LIMIT 10;
-```
-
-Use `totalCost` from the relevant row as the amount to restore, cross-checking `balanceAtEvent` against what the player expects their balance to have been, then:
-
-```sql
-UPDATE dedicatedStorage
-SET amount = amount + <totalCost>
-WHERE clusterId = ? AND ownerId = ? AND resourceId = ?;
-```
-
-## Optional Add-on: Cloud Storage Cleanup on Decay (Lethal's Decay users only)
-
-If you also run [Lethal's Decay]([https://www.curseforge.com/ark-survival-ascended/mods/lethals-decay](https://ark-server-api.com/resources/lethal-decay-ascended.4/) on your cluster, you can wire up a database trigger that automatically purges a player's `dedicatedStorage` rows once Lethal's Decay marks their tribe as fully decayed out. This is **not** a feature of the API itself — nothing in this repo depends on it, queries for it, or ships it automatically. It's a standalone SQL trigger you can add to your decay database if you want the cleanup, documented here purely as a convenience for server owners running both.
-
-**Why this lives outside the app:** `dedicatedStorage` rows are keyed by the Unreal Engine `PlayerId`, but Lethal's Decay keys tribes by `EOS_ID`. There's no direct join between the two unless you have some other plugin's database that happens to record both IDs together. If you run a kill-tracking, points, or rewards-style plugin like [pointrewards](https://ark-server-api.com/resources/asa-pointrewards.101/) that logs both `EosId` and `PlayerId` per event, that table becomes the bridge. The trigger below assumes such a table exists — adjust the database/table/column names to match whatever you actually have.
+Since decay databases typically key players by EOSID rather than the Unreal Engine PlayerID this project's `dedicatedStorage` table uses, you'll need some bridging data that records both IDs together for the same player — a kill-rewards plugin, a points/stats plugin, anything that logs both `EosId` and `PlayerId` in the same row works. Below is an example trigger built against Lethal's Decay and a kill-rewards plugin bridging table; adapt the table/column names to whatever you're actually running.
 
 ```sql
 DELIMITER $$
@@ -135,7 +123,7 @@ Notes:
 - Deletes across **all** `clusterId`s for that `ownerId`, not just the map that decayed — since Lethal's Decay is itself cluster-aware (a tribe only reaches `-2` once every connected map agrees they're inactive), a decayed tribe's cloud storage should be cleared cluster-wide.
 - If no bridging row exists for a given `EOS_ID` (e.g. a player who quit before generating any qualifying event), the delete simply matches zero rows — safe no-op.
 - This requires cross-database visibility from whichever MySQL/MariaDB user runs the trigger (i.e. your decay DB, your bridging-plugin DB, and `clouddb` all need to be reachable from the same instance/credentials).
-- Swap in your actual decay database/table name, bridging table/columns, and cloud storage database name (`clouddb` here matches this project's own `DATABASE_URL` target) before using this.
+- Swap in your actual decay database/table name, bridging table/columns, and cloud storage database name (`clouddb` here matches this project's own database target) before using this.
 
 ## Known Limitations / Tradeoffs
 
@@ -170,25 +158,15 @@ So, the goal....change it so it behaves like base ark's storage system and not "
 
 ## INSTALLATION
 
-See wiki -> <https://github.com/bushome/ark-cloud-storage-no-overflow/wiki>
+See wiki -> <https://github.com/bushome/ark-cloud-storage-no-overflow/wiki> for full platform-specific install instructions (Windows/IISNode, Linux/Unix, Docker).
 
 After pulling this variant's changes, there's a couple extra steps beyond the base install:
 
 1. Run the included `migration.sql` against your database (same as the base install process).
 2. `npm install` — pulls in the new dependencies (`@nestjs/schedule`, `@prisma/adapter-mariadb`, `@prisma/adapter-better-sqlite3`).
-3. `npm run prisma:generate` — generates **both** the MySQL and SQLite Prisma clients (this variant needs both regardless of which one you actually run, since they're two separate generated clients under the hood).
-4. Add the following to your `.env`:
-
-    ```
-    INVENTORY_BATCH_WINDOW_MS="100"
-    AUDIT_LOG_RETENTION_DAYS="3"
-    DUPE_ALERT_DISCORD_WEBHOOK="<your Discord webhook URL, optional>"
-    ```
-
-    (`DATABASE_URL` still needs to be here too, same as the base install — it's used by the Prisma CLI/tooling above, just no longer read by the running app itself.)
-
-5. **If you want MySQL** (most cluster operators will): create a `config.json` next to the compiled app with your connection details — see "Database connection: now via config.json, not .env" above. **If you skip this step you'll get SQLite instead**, silently — no error, just not your MySQL database.
+3. `npm run prisma:generate` — generates **both** the MySQL and SQLite Prisma clients (this variant needs both regardless of which one you actually run, since they're two separate generated clients under the hood). No `.env` or `DATABASE_URL` needed for this step.
+4. Configure `config.json` next to the compiled app — see "Database connection: now via config.json, not .env" above for the full example. At minimum, if using MySQL, you need `MySQL.User`/`Password`/`Database` and at least one `Auth.RegisterClusters` entry; `Inventory.BatchWindowMs`, `AuditLog.RetentionDays`, and `AuditLog.DiscordWebhook` are all optional and fall back to defaults if omitted. **If you skip this file entirely you'll get SQLite instead**, silently — no error, just not your MySQL database.
 
 **Don't run `npx prisma migrate dev`.** This project applies schema changes via `migration.sql` directly rather than through Prisma's own migration history — running `migrate dev` against an existing install will report schema drift and offer to reset your database. Decline it; it isn't necessary and you will lose your data.
 
-Eventually I'll release a drop in windows executable than can just be ran on the desktop someplace without all the setup kerfuffle — `config.json` and the SQLite option above are real steps toward that, but there's more to land (the actual packaging step itself, in particular) before it's ready......there will be more on that later once I'm happy with the build in a configuration I find to my liking.
+A precompiled, ready-to-run distributable (no build step required) is available in this repo's `Deployables/NodeJS/` folder for the MySQL/cluster-operator case — just needs `config.json` filled in with your connection details, same as any other install. A true single-file Windows executable (no Node.js install required at all) is also confirmed working end-to-end for the MySQL/cluster-operator target, packaged via Node's own Single Executable Applications feature — not yet the default recommended install path while some packaging/cutover details get finalized, but functional today if you want to try it. A solo-player/SQLite-specific drop-in executable (fully self-contained, zero setup) is planned but not yet built — SQLite's native database driver can't be bundled the same way, so that one needs a different packaging approach that's still in the design stage.
