@@ -47,6 +47,7 @@ lerna-debug.log*
 # credentials, Discord webhook). Never commit. See config.json.example
 # for the template.
 config.json
+!Deployables/**/config.json
 
 # temp directory
 .temp

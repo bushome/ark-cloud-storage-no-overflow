@@ -1,0 +1,40 @@
+{
+  "UseMySQL": true,
+
+  "MySQL": {
+    "Host": "127.0.0.1",
+    "Port": 3306,
+    "User": "",
+    "Password": "",
+    "Database": "",
+	"ConnectionLimit": 50
+  },
+
+  "SQLite": {
+    "File": "./data/cloudstorage.db"
+  },
+
+  "Server": {
+    "Port": 3000
+  },
+
+  "Auth": {
+    "AllowClusterRegistration": false,
+    "RegisterClusters": [
+      { "ClusterId": "", "Secret": "" }
+    ]
+  },
+
+  "Inventory": {
+    "BatchWindowMs": 100
+  },
+
+  "AuditLog": {
+    "RetentionDays": 3,
+    "DiscordWebhook": ""
+  },
+
+  "Logging": {
+    "Verbose": false
+  }
+}

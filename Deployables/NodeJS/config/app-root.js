@@ -1,0 +1,14 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getAppRootDir = getAppRootDir;
+exports.resolveAppPath = resolveAppPath;
+const path_1 = require("path");
+function getAppRootDir() {
+    return require.main ? (0, path_1.dirname)(require.main.filename) : process.cwd();
+}
+function resolveAppPath(maybeRelativePath) {
+    return (0, path_1.isAbsolute)(maybeRelativePath)
+        ? maybeRelativePath
+        : (0, path_1.join)(getAppRootDir(), maybeRelativePath);
+}
+//# sourceMappingURL=app-root.js.map

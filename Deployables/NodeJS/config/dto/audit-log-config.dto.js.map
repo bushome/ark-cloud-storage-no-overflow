@@ -1,0 +1,1 @@
+{"version":3,"file":"audit-log-config.dto.js","sourceRoot":"","sources":["../../../src/config/dto/audit-log-config.dto.ts"],"names":[],"mappings":";;;;;;;;;;;;AAAA,qDAAuD;AAEvD,MAAa,iBAAiB;IAA9B;QAGE,kBAAa,GAAW,CAAC,CAAC;QAI1B,mBAAc,GAAW,EAAE,CAAC;IAC9B,CAAC;CAAA;AARD,8CAQC;AALC;IAFC,IAAA,uBAAK,GAAE;IACP,IAAA,qBAAG,EAAC,CAAC,CAAC;;wDACmB;AAI1B;IADC,IAAA,0BAAQ,GAAE;;yDACiB"}

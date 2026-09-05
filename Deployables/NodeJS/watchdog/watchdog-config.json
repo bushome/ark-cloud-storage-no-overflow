@@ -1,0 +1,15 @@
+{
+  "appDir": "C:\\PATH\\TO\\YOUR\\APP\\dist",
+  "appEntry": "main.js",
+  "healthUrl": "http://localhost:3000/health",
+  "healthIntervalMs": 20000,
+  "healthTimeoutMs": 5000,
+  "startupGraceMs": 15000,
+  "backoffStartMs": 1000,
+  "backoffMaxMs": 30000,
+  "backoffMultiplier": 2,
+  "crashWindowMs": 300000,
+  "maxCrashesInWindow": 5,
+  "healthyResetMs": 120000,
+  "logFile": "watchdog.log"
+}

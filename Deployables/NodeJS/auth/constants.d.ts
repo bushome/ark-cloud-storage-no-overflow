@@ -1,0 +1,3 @@
+export declare const ALLOW_UNAUTHORIZED = "ALLOW_UNAUTHORIZED";
+export declare const ALLOW_REGISTRATION = "ALLOW_REGISTRATION";
+export declare const REGISTER_CLUSTERS = "REGISTER_CLUSTERS";

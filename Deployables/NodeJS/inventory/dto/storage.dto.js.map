@@ -1,0 +1,1 @@
+{"version":3,"file":"storage.dto.js","sourceRoot":"","sources":["../../../src/inventory/dto/storage.dto.ts"],"names":[],"mappings":";;;;;;;;;;;;AAAA,qDAAkD;AAKlD,MAAsB,UAAU;IAmB5B,YAAsB,IAAO,EAAE,OAAe;QAC1C,IAAI,CAAC,IAAI,GAAG,IAAI,CAAC;QACjB,IAAI,CAAC,OAAO,GAAG,OAAO,CAAC;IAC3B,CAAC;CACJ;AAvBD,gCAuBC;AAlBG;IADC,IAAA,0BAAQ,GAAE;;wCACH;AAMR;IADC,IAAA,uBAAK,GAAE;;2CACQ"}
