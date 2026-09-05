@@ -4,7 +4,9 @@ This is a variant of Florian Kostenzer's, <https://github.com/123FLO321>, work f
 
 ## API Variant Differences
 
-The main difference with this API variant is how it handles resource balances committed to the database.
+This project exists because of scale. A database engine like **MariaDB** can handle a lot of transactions, but the volume adds up fast on a large cluster — think **50–70 active players per server across 12+ servers**, with multiple players simultaneously crafting, depositing, and withdrawing resources, plus other plugins also querying the same database. Once you have enough concurrent activity, that traffic can start causing real performance issues and server lag, particularly around storage containers and crafting systems. The changes below aim to change that: behave like base ARK's storage system rather than allowing an "overdrawn" balance, and scale better for larger clusters in the process.
+
+The main functional difference with this API variant is how it handles resource balances committed to the database.
 
 Instead of allowing a storage container to go into a **negative balance** and requiring you to re-deposit the overdrawn resources before that container can be used for crafting again, this variant behaves much more like **ARK's original storage system**.
 
@@ -136,25 +138,6 @@ Full transparency on a couple of things worth knowing before you deploy this:
 - **Update (post-v93.15 patch): this project's own mitigation now holds overage at zero, while native/unsynced storage got significantly worse.** The paragraph above described pre-patch behavior, where cloud-synced storage widened the race window compared to vanilla or other mods' dedicated storage. That's no longer the picture. Following ARK's v93.15 patch, retesting showed the *native, unsynced* race got substantially worse — vanilla and Cyber Structures dedicated storage both now show clean-run overage in the ~15-20% range (roughly 8-10x the old ~2% baseline), with no meaningful difference between them. Meanwhile, the cloud-synced, API-routed path — the one actively protected by this project's atomic `updateMany(amount >= cost)` gate plus per-resource serialization — held at **exactly the expected amount, zero overage**, confirmed identical whether running as the packaged SEA executable or plain `node dist/main.js`. In short: as of the current ARK patch, this project's mitigation is doing real, measurable work, and running without it (vanilla/other dedicated storage) is now considerably riskier than it was when the paragraph above was originally written.
 
 - The mod developer is aware of both of these and is working on backend/mod-side changes of his own — I'm holding off on a bigger rework here (audit log redesign, revisiting the clamp behavior) until that lands.
-
-# Summary
-
-When multiple resource requests come in from multiple crafting stations, for example, the requests are now **aggregated** rather than sending a large number of individual line-item update requests at the same time.
-
-The API also uses resource amounts that are already known and stored **in memory**, rather than performing a `SELECT` query against the database for every update operation. This should reduce the amount of work being pushed onto the database engine and lowering latency since it's using an already known value rather then having to retrieve it from the database each time.
-
-Though a database engine such as **MariaDB** can certainly handle a lot of transactions, the volume can add up quickly on a larger server clusters. More so if you are passing multiple clusters through the same instance.
-
-For example, if you have:
-
-- **50–70 active players per server**
-- **12+ servers**
-- Multiple players simultaneously crafting, depositing, and withdrawing resources
-- Other plugins also querying the database
-
-Those requests can add up to a significant amount of database traffic. Once you have enough concurrent activity, you may start seeing performance issues or increased server lag, particularly when large numbers of players are interacting with storage containers and crafting systems at the same time.
-
-So, the goal....change it so it behaves like base ark's storage system and not "overdraw" your balance....work on improvements that would scale for larger clusters to keep it more performant.
 
 ## INSTALLATION
 
