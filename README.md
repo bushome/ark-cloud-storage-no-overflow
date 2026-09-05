@@ -67,7 +67,7 @@ Drop a `config.json` next to the compiled app (`dist/main.js`) with your MySQL c
 }
 ```
 
-**If you skip this, the app won't error on `MySQL` — it'll quietly default to a local SQLite file instead of your MySQL database.** That's intentional zero-config behavior for solo players (see below), but it means an existing MySQL self-hoster who forgets this step after upgrading won't get an obvious failure, just a quietly empty new database. Double-check this file is actually in place before you trust an upgrade. Note that `MySQL.User`, `MySQL.Password`, `MySQL.Database`, and at least one `Auth.RegisterClusters` entry are hard-required with no safe default if `UseMySQL: true` — the app will fail validation loudly on boot if these are missing, rather than silently proceeding.
+**If you skip this, the app won't error on `MySQL` — it'll quietly default to a local SQLite file instead of your MySQL database.** That's intentional zero-config behavior for solo players (see below), but it means an existing MySQL self-hoster who forgets this step after upgrading won't get an obvious failure, just a quietly empty new database. Double-check this file is actually in place before you trust an upgrade. Note that MySQL.User, MySQL.Password, and MySQL.Database are hard-required with no safe default if UseMySQL: true — the app will fail validation loudly on boot if these are missing, rather than silently proceeding. Auth.RegisterClusters has no such requirement — see the SQLite section below and the Installation steps for how to register a cluster with zero pre-configuration.
 
 `ConnectionLimit` is the direct replacement for the old `.env`/`DATABASE_URL`'s `?connection_limit=N` — same pool-size knob, own field now. It's optional: leave it out and the `mariadb` driver's own default (10) applies instead. Large clusters will likely want it set explicitly — `50` is what this project's own production cluster runs with, given multiple crafting stations hitting the same box concurrently.
 
@@ -79,7 +79,7 @@ Alongside MySQL/MariaDB, this variant can now run on a local SQLite file instead
 
 If `config.json` is missing entirely, this is the default: a SQLite file gets created at `./data/cloudstorage.db` (relative to wherever `main.js` actually is), and there's nothing else to configure. To use MySQL instead, see the `config.json` example above (`"UseMySQL": true` plus your connection details) — the reverse also holds, `"UseMySQL": false` (or no `config.json` at all) gets you SQLite.
 
-`Server.Port`, cluster auto-registration (`Auth.RegisterClusters`), batch-window tuning (`Inventory.BatchWindowMs`), audit-log settings (`AuditLog.RetentionDays`, `AuditLog.DiscordWebhook`), and verbose logging (`Logging.Verbose`) are all fully wired to `config.json` now — no `.env` fallback exists anywhere in the running app. Optional settings fall back to sensible built-in defaults if omitted; DB credentials and at least one bootstrap cluster are hard-required with no safe default.
+`Server.Port`, cluster auto-registration (`Auth.RegisterClusters`), batch-window tuning (`Inventory.BatchWindowMs`), audit-log settings (`AuditLog.RetentionDays`, `AuditLog.DiscordWebhook`), and verbose logging (`Logging.Verbose`) are all fully wired to `config.json` now — no `.env` fallback exists anywhere in the running app. Optional settings fall back to sensible built-in defaults if omitted; only MySQL's connection credentials are hard-required with no safe default, and only when UseMySQL: true — Auth.RegisterClusters can be left empty entirely; register a cluster after boot via POST /auth/register instead.
 
 ### Database engine: Prisma driver adapters (no more native binary)
 
@@ -93,7 +93,7 @@ Why this matters: that native binary (`query_engine-*.dll.node` on Windows) is a
 
 There's also a new audit-log system that isn't in upstream at all: every deduction attempt (success or fail) gets logged, along with a per-resource "theoretical max consumption rate" ceiling. A scheduled job checks recent activity against that ceiling and can fire a Discord webhook (`AuditLog.DiscordWebhook` in `config.json`, optional — if you don't set it, findings still show up in the app's own log) if something blows past what's physically possible for a single crafting structure to produce, even accounting for crafting-skill stat, ClockFace multipliers, and buffs.
 
-One early false-positive got caught and fixed: a single large bulk-transfer withdrawal (like Cyber Structures' pull-all tool restocking several resources at once) could look like it blew past the ceiling on its own, even though it's one atomic transaction, not a sustained crafting burst. The check now also requires at least 3 separate withdrawal events within the same window before it'll flag anything — a one-shot bulk pull, however large, won't trip it.
+One early false-positive got caught and fixed: a single large bulk-transfer withdrawal (like Cyber Structures' pull-all tool restocking several resources at once) could look like it blew past the ceiling on its own, even though it's one atomic transaction, not a sustained crafting burst. The check now also requires at least 3 separate withdrawal events within the same window before it'll flag anything — a one-shot bulk pull, however large, won't trip it. This system is specific to the MySQL/cluster-operator path — a solo-player SQLite instance doesn't include these tables at all, since there's no multi-player scenario for it to detect anything against.
 
 ## Decay-Database Reconciliation (Optional Add-On)
 
@@ -147,10 +147,10 @@ See wiki -> <https://github.com/bushome/ark-cloud-storage-no-overflow/wiki> for 
 
 After pulling this variant's changes, there's a couple extra steps beyond the base install:
 
-1. Run the included `migration.sql` against your database (same as the base install process).
+1. **MySQL/MariaDB only**: run the included `migration.sql` against your database (same as the base install process). **Not needed for SQLite** — the SQLite path automatically creates its own schema on first boot if the database file is fresh/empty.
 2. `npm install` — pulls in the new dependencies (`@nestjs/schedule`, `@prisma/adapter-mariadb`, `@prisma/adapter-better-sqlite3`).
 3. `npm run prisma:generate` — generates **both** the MySQL and SQLite Prisma clients (this variant needs both regardless of which one you actually run, since they're two separate generated clients under the hood). No `.env` or `DATABASE_URL` needed for this step.
-4. Configure `config.json` next to the compiled app — see "Database connection: now via config.json, not .env" above for the full example. At minimum, if using MySQL, you need `MySQL.User`/`Password`/`Database` and at least one `Auth.RegisterClusters` entry; `Inventory.BatchWindowMs`, `AuditLog.RetentionDays`, and `AuditLog.DiscordWebhook` are all optional and fall back to defaults if omitted. **If you skip this file entirely you'll get SQLite instead**, silently — no error, just not your MySQL database.
+4. Configure `config.json` next to the compiled app — see "Database connection: now via config.json, not .env" above for the full example. If using MySQL, you need `MySQL.User`/`Password`/`Database` filled in; those have no safe default and validation will fail loudly if missing. `Auth.RegisterClusters` is genuinely optional — leave it empty (or skip `config.json` entirely) and register a cluster after first boot instead via `POST /auth/register`; `Inventory.BatchWindowMs`, `AuditLog.RetentionDays`, and `AuditLog.DiscordWebhook` are all optional too and fall back to defaults if omitted.
 
 **Don't run `npx prisma migrate dev`.** This project applies schema changes via `migration.sql` directly rather than through Prisma's own migration history — running `migrate dev` against an existing install will report schema drift and offer to reset your database. Decline it; it isn't necessary and you will lose your data.
 
