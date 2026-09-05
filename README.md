@@ -170,7 +170,7 @@ So, the goal....change it so it behaves like base ark's storage system and not "
 
 ## INSTALLATION
 
-You can follow Florian's original install using Docker Desktop as posted on their repository from the link at the top of this page or if you want to use Window's built in IIS service if you are already running a web server than follow the wiki -> <https://github.com/bushome/ark-cloud-storage-no-overflow/wiki>
+See wiki -> <https://github.com/bushome/ark-cloud-storage-no-overflow/wiki>
 
 After pulling this variant's changes, there's a couple extra steps beyond the base install:
 
