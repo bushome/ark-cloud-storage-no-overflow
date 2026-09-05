@@ -4,7 +4,9 @@ This is a variant of Florian Kostenzer's, <https://github.com/123FLO321>, work f
 
 ## API Variant Differences
 
-The main difference with this API variant is how it handles resource balances committed to the database.
+This project exists because of scale. A database engine like **MariaDB** can handle a lot of transactions, but the volume adds up fast on a large cluster — think **50–70 active players per server across 12+ servers**, with multiple players simultaneously crafting, depositing, and withdrawing resources, plus other plugins also querying the same database. Once you have enough concurrent activity, that traffic can start causing real performance issues and server lag, particularly around storage containers and crafting systems. The changes below aim to change that: behave like base ARK's storage system rather than allowing an "overdrawn" balance, and scale better for larger clusters in the process.
+
+The main functional difference with this API variant is how it handles resource balances committed to the database.
 
 Instead of allowing a storage container to go into a **negative balance** and requiring you to re-deposit the overdrawn resources before that container can be used for crafting again, this variant behaves much more like **ARK's original storage system**.
 
@@ -91,6 +93,8 @@ Why this matters: that native binary (`query_engine-*.dll.node` on Windows) is a
 
 There's also a new audit-log system that isn't in upstream at all: every deduction attempt (success or fail) gets logged, along with a per-resource "theoretical max consumption rate" ceiling. A scheduled job checks recent activity against that ceiling and can fire a Discord webhook (`AuditLog.DiscordWebhook` in `config.json`, optional — if you don't set it, findings still show up in the app's own log) if something blows past what's physically possible for a single crafting structure to produce, even accounting for crafting-skill stat, ClockFace multipliers, and buffs.
 
+One early false-positive got caught and fixed: a single large bulk-transfer withdrawal (like Cyber Structures' pull-all tool restocking several resources at once) could look like it blew past the ceiling on its own, even though it's one atomic transaction, not a sustained crafting burst. The check now also requires at least 3 separate withdrawal events within the same window before it'll flag anything — a one-shot bulk pull, however large, won't trip it.
+
 ## Decay-Database Reconciliation (Optional Add-On)
 
 If you're also running a decay-tracking plugin/database to manage base decay timing, you can use a SQL trigger to automatically clear a tribe's cloud storage once their base has fully decayed out from inactivity — otherwise those rows just sit there indefinitely with nothing to claim them.
@@ -133,28 +137,9 @@ Full transparency on a couple of things worth knowing before you deploy this:
 
 - **Why I added the clamp in the first place:** per the developer, crafting stations should only ever react to a *reported* balance, and vanilla dedicated storage is supposed to clamp that reported value to zero regardless of the true underlying number — meaning allowing negative balances internally shouldn't even matter for stopping crafting as the value is supposed to be reported anything ≤ 0 as 0. That's not what I saw in testing, though. A gunpowder-crafting stress test starting from 5000 of each resource kept crafting running well past zero, with the underlying negative balance ballooning rapidly to well over -180,000 in short order once it passed the zero point. When I brought this up with the dev, he said that shouldn't be possible per his own last check with vanilla structures — we agreed it's plausible a more recent ARK patch changed how that leftover/reported value gets read since he last verified it. Either way, that runaway behavior is exactly why this variant refuses to let a box go negative at all rather than relying on ARK to clamp it for you. It's a safety net, not a fix for the race.
 
-- **Cloud/synced storage widens the underlying race window compared to vanilla or other mods' dedicated storage.** In testing, vanilla dedicated storage boxes and Cyber Structures ( that's just the additional non-vanilla mod dedistorage asset I had available that wasn't cloud connected. No claims against or for using any other variants for proofing ) storage both stayed around a small (~2%) baseline overage from the ARK-side race regardless of setup, while cloud storage boxes scaled up noticeably higher with more concurrent stations and shorter batch windows. Widening the batch window helps somewhat but plateaus and starts causing legitimate crafts to stall, so it's a tuning knob, not a fix.
+- **Update (post-v93.15 patch): this project's own mitigation now holds overage at zero, while native/unsynced storage got significantly worse.** The paragraph above described pre-patch behavior, where cloud-synced storage widened the race window compared to vanilla or other mods' dedicated storage. That's no longer the picture. Following ARK's v93.15 patch, retesting showed the *native, unsynced* race got substantially worse — vanilla and Cyber Structures dedicated storage both now show clean-run overage in the ~15-20% range (roughly 8-10x the old ~2% baseline), with no meaningful difference between them. Meanwhile, the cloud-synced, API-routed path — the one actively protected by this project's atomic `updateMany(amount >= cost)` gate plus per-resource serialization — held at **exactly the expected amount, zero overage**, confirmed identical whether running as the packaged SEA executable or plain `node dist/main.js`. In short: as of the current ARK patch, this project's mitigation is doing real, measurable work, and running without it (vanilla/other dedicated storage) is now considerably riskier than it was when the paragraph above was originally written.
 
 - The mod developer is aware of both of these and is working on backend/mod-side changes of his own — I'm holding off on a bigger rework here (audit log redesign, revisiting the clamp behavior) until that lands.
-
-# Summary
-
-When multiple resource requests come in from multiple crafting stations, for example, the requests are now **aggregated** rather than sending a large number of individual line-item update requests at the same time.
-
-The API also uses resource amounts that are already known and stored **in memory**, rather than performing a `SELECT` query against the database for every update operation. This should reduce the amount of work being pushed onto the database engine and lowering latency since it's using an already known value rather then having to retrieve it from the database each time.
-
-Though a database engine such as **MariaDB** can certainly handle a lot of transactions, the volume can add up quickly on a larger server clusters. More so if you are passing multiple clusters through the same instance.
-
-For example, if you have:
-
-- **50–70 active players per server**
-- **12+ servers**
-- Multiple players simultaneously crafting, depositing, and withdrawing resources
-- Other plugins also querying the database
-
-Those requests can add up to a significant amount of database traffic. Once you have enough concurrent activity, you may start seeing performance issues or increased server lag, particularly when large numbers of players are interacting with storage containers and crafting systems at the same time.
-
-So, the goal....change it so it behaves like base ark's storage system and not "overdraw" your balance....work on improvements that would scale for larger clusters to keep it more performant.
 
 ## INSTALLATION
 
