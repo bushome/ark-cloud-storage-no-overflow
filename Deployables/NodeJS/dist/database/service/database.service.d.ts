@@ -1,5 +1,5 @@
 import { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { PrismaClient as MySqlPrismaClient } from '../../../generated/mysql-client';
+import type { PrismaClient as MySqlPrismaClient } from '../../../generated/mysql-client';
 import { AppConfigDto } from '../../config/dto/app-config.dto';
 export interface DatabaseService extends MySqlPrismaClient {
 }

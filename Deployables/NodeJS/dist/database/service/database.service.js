@@ -18,8 +18,6 @@ const fs_1 = require("fs");
 const path_1 = require("path");
 const common_1 = require("@nestjs/common");
 const adapter_better_sqlite3_1 = require("@prisma/adapter-better-sqlite3");
-const adapter_mariadb_1 = require("@prisma/adapter-mariadb");
-const mysql_client_1 = require("../../../generated/mysql-client");
 const sqlite_client_1 = require("../../../generated/sqlite-client");
 const config_constants_1 = require("../../config/config.constants");
 const app_root_1 = require("../../config/app-root");
@@ -58,7 +56,9 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
         });
     }
     static buildMySqlClient(config) {
-        const adapter = new adapter_mariadb_1.PrismaMariaDb({
+        const { PrismaMariaDb } = require('@prisma/adapter-mariadb');
+        const { PrismaClient: MySqlPrismaClientRuntime } = require('../../../generated/mysql-client');
+        const adapter = new PrismaMariaDb({
             host: config.MySQL.Host,
             port: config.MySQL.Port,
             user: config.MySQL.User,
@@ -68,7 +68,7 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                 ? { connectionLimit: config.MySQL.ConnectionLimit }
                 : {}),
         });
-        return new mysql_client_1.PrismaClient({ adapter });
+        return new MySqlPrismaClientRuntime({ adapter });
     }
     static resolveSqliteFsPath(configured) {
         return configured.startsWith('file:') ? configured.slice('file:'.length) : (0, app_root_1.resolveAppPath)(configured);

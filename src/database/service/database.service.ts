@@ -2,13 +2,12 @@ import { mkdirSync } from 'fs';
 import { dirname } from 'path';
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaBetterSQLite3 } from '@prisma/adapter-better-sqlite3';
-import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 // These come from the TWO generated clients (see prisma/schema.mysql.prisma
 // and prisma/schema.sqlite.prisma) — NOT two imports of the same client.
 // Prisma ties a generated client to a single datasource `provider`, so one
 // PrismaClient class cannot be pointed at either database at runtime; see
 // the "Two-schema requirement" note in the accompanying README section.
-import { PrismaClient as MySqlPrismaClient } from '../../../generated/mysql-client';
+import type { PrismaClient as MySqlPrismaClient } from '../../../generated/mysql-client';
 import { PrismaClient as SqlitePrismaClient } from '../../../generated/sqlite-client';
 import { APP_CONFIG } from '../../config/config.constants';
 import { resolveAppPath } from '../../config/app-root';
@@ -93,21 +92,31 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     }) as unknown as DatabaseService;
   }
 
-  private static buildMySqlClient(config: AppConfigDto): MySqlPrismaClient {
-    const adapter = new PrismaMariaDb({
-      host: config.MySQL.Host,
-      port: config.MySQL.Port,
-      user: config.MySQL.User,
-      password: config.MySQL.Password,
-      database: config.MySQL.Database,
-      // Only included when explicitly set — see MySqlConfigDto for why this
-      // isn't defaulted to a hardcoded number.
-      ...(config.MySQL.ConnectionLimit != null
-        ? { connectionLimit: config.MySQL.ConnectionLimit }
-        : {}),
-    });
-    return new MySqlPrismaClient({ adapter });
-  }
+   private static buildMySqlClient(config: AppConfigDto): MySqlPrismaClient {
+    // Lazily required — only ever reached when config.UseMySQL is true.
+    // Keeps @prisma/adapter-mariadb and generated/mysql-client's runtime
+    // code out of the load path entirely for SQLite-only deployment
+    // trees (e.g. the Go-launcher build) that never install that adapter
+    // at all. MySqlPrismaClient is still imported as a type above (import
+    // type, erased at compile time) purely for the declaration-merging
+    // interface and the AnyPrismaClient union — that only needs
+    // generated/mysql-client's .d.ts files to exist at build time, not
+    // its runtime code to exist at execution time.
+    const { PrismaMariaDb } = require('@prisma/adapter-mariadb');
+    const { PrismaClient: MySqlPrismaClientRuntime } = require('../../../generated/mysql-client');
+     const adapter = new PrismaMariaDb({
+       host: config.MySQL.Host,
+       port: config.MySQL.Port,
+       user: config.MySQL.User,
+       password: config.MySQL.Password,
+       database: config.MySQL.Database,
+       ...(config.MySQL.ConnectionLimit != null
+         ? { connectionLimit: config.MySQL.ConnectionLimit }
+         : {}),
+     });
+
+    return new MySqlPrismaClientRuntime({ adapter });
+   }
 
   /**
    * Strips a leading `file:` prefix (already-fully-resolved case) or
