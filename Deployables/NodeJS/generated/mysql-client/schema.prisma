@@ -1,0 +1,45 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "client"
+  output     = "../generated/mysql-client"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Cluster {
+  id     String @db.VarChar(100)
+  secret String @db.VarChar(100)
+
+  @@id([id])
+}
+
+model DedicatedStorage {
+  resourceId String @db.VarChar(500)
+  clusterId  String @db.VarChar(100)
+  ownerId    Int
+  amount     Int
+
+  @@id([clusterId, ownerId, resourceId])
+}
+
+model DeductionAuditLog {
+  id             Int      @id @default(autoincrement())
+  clusterId      String
+  ownerId        Int
+  resourceId     String
+  totalCost      Int
+  succeeded      Boolean
+  balanceAtEvent Int
+  createdAt      DateTime @default(now())
+
+  @@index([ownerId, resourceId, createdAt])
+}
+
+model ResourceRateCeiling {
+  resourceId         String  @id
+  maxLegitRatePerSec Decimal @db.Decimal(10, 2)
+  notes              String?
+}

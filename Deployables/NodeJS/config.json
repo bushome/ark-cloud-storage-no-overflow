@@ -2,7 +2,7 @@
   "UseMySQL": true,
 
   "MySQL": {
-    "Host": "127.0.0.1",
+    "Host": "",
     "Port": 3306,
     "User": "",
     "Password": "",
@@ -15,7 +15,7 @@
   },
 
   "Server": {
-    "Port": 3000
+    "Port": 3005
   },
 
   "Auth": {
@@ -35,6 +35,6 @@
   },
 
   "Logging": {
-    "Verbose": false
+    "Verbose": true
   }
 }
