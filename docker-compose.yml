@@ -10,7 +10,9 @@ services:
       MYSQL_DATABASE: clouddb
       MYSQL_ROOT_PASSWORD: your-db-password
   api:
-    image: arkcloudstorage/api
+    build:
+        context: .
+        dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
       - db
