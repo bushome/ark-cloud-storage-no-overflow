@@ -93,6 +93,8 @@ Why this matters: that native binary (`query_engine-*.dll.node` on Windows) is a
 
 There's also a new audit-log system that isn't in upstream at all: every deduction attempt (success or fail) gets logged, along with a per-resource "theoretical max consumption rate" ceiling. A scheduled job checks recent activity against that ceiling and can fire a Discord webhook (`AuditLog.DiscordWebhook` in `config.json`, optional — if you don't set it, findings still show up in the app's own log) if something blows past what's physically possible for a single crafting structure to produce, even accounting for crafting-skill stat, ClockFace multipliers, and buffs.
 
+One early false-positive got caught and fixed: a single large bulk-transfer withdrawal (like Cyber Structures' pull-all tool restocking several resources at once) could look like it blew past the ceiling on its own, even though it's one atomic transaction, not a sustained crafting burst. The check now also requires at least 3 separate withdrawal events within the same window before it'll flag anything — a one-shot bulk pull, however large, won't trip it.
+
 ## Decay-Database Reconciliation (Optional Add-On)
 
 If you're also running a decay-tracking plugin/database to manage base decay timing, you can use a SQL trigger to automatically clear a tribe's cloud storage once their base has fully decayed out from inactivity — otherwise those rows just sit there indefinitely with nothing to claim them.
