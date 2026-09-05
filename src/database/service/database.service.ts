@@ -29,18 +29,48 @@ type AnyPrismaClient = MySqlPrismaClient | SqlitePrismaClient;
  */
 export interface DatabaseService extends MySqlPrismaClient {}
 
+/**
+ * Inlined rather than shipped as a separate .sql file — this avoids a
+ * manual copy-step across every deployment shape (clouddb, Deployables/
+ * NodeJS, the eventual Go-launcher's embedded payload). Generated via
+ * `npx prisma migrate diff --from-empty --to-schema-datamodel
+ * prisma/schema.sqlite.prisma --script` — regenerate the same way if
+ * schema.sqlite.prisma's Cluster/DedicatedStorage models ever change.
+ * Deliberately excludes DeductionAuditLog/ResourceRateCeiling — the
+ * dupe-detection audit system has no purpose in a solo-player context
+ * (no adversarial multi-player scenario to detect), and
+ * InventoryService's logDeduction is already gated behind
+ * config.UseMySQL so it never attempts to write to a table that
+ * doesn't exist here.
+ */
+const SQLITE_INITIAL_SCHEMA_STATEMENTS = [
+  `CREATE TABLE "Cluster" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "secret" TEXT NOT NULL
+);`,
+  `CREATE TABLE "DedicatedStorage" (
+    "resourceId" TEXT NOT NULL,
+    "clusterId" TEXT NOT NULL,
+    "ownerId" INTEGER NOT NULL,
+    "amount" INTEGER NOT NULL,
+    PRIMARY KEY ("clusterId", "ownerId", "resourceId")
+);`,
+];
+
 @Injectable()
 export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DatabaseService.name);
   private readonly client: AnyPrismaClient;
+  private readonly isMySql: boolean;
 
   constructor(@Inject(APP_CONFIG) config: AppConfigDto) {
-    this.client = config.UseMySQL
+    this.isMySql = config.UseMySQL;
+    this.client = this.isMySql
       ? DatabaseService.buildMySqlClient(config)
       : DatabaseService.buildSqliteClient(config);
 
     this.logger.log(
-      config.UseMySQL
+      this.isMySql
         ? `Database: MySQL/MariaDB at ${config.MySQL.Host}:${config.MySQL.Port}/${config.MySQL.Database}`
         : `Database: SQLite at ${DatabaseService.resolveSqliteFsPath(config.SQLite.File)}`,
     );
@@ -103,8 +133,36 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return new SqlitePrismaClient({ adapter });
   }
 
+  /**
+   * A freshly-created SQLite file has no tables at all — better-sqlite3
+   * happily creates an empty file on connect, but nothing else applies the
+   * schema automatically (unlike MySQL, where an operator runs migration.sql
+   * by hand against an already-provisioned server before first boot).
+   * Checks sqlite_master directly for the Cluster table rather than relying
+   * on a specific Prisma error code, so this stays correct even if Prisma's
+   * error surface changes across versions. Runs the inlined DDL as a single
+   * executeRawUnsafe call if the table is missing; a no-op on every
+   * subsequent boot once the schema exists.
+   */
+  private async ensureSqliteSchema(): Promise<void> {
+    const client = this.client as SqlitePrismaClient;
+    const existing = await client.$queryRawUnsafe<{ name: string }[]>(
+      `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'Cluster'`,
+    );
+    if (existing.length > 0) {
+      return;
+    }
+    this.logger.log('SQLite database is uninitialized — applying initial schema.');
+    for (const statement of SQLITE_INITIAL_SCHEMA_STATEMENTS) {
+      await client.$executeRawUnsafe(statement);
+    }
+  }
+
   async onModuleInit(): Promise<void> {
     await this.client.$connect();
+    if (!this.isMySql) {
+      await this.ensureSqliteSchema();
+    }
   }
 
   async onModuleDestroy(): Promise<void> {

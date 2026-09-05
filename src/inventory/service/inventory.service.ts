@@ -1,8 +1,11 @@
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
-import { DatabaseService } from "../../database/service/database.service";
-import { StorageDto } from "../dto/storage.dto";
-import { DedicatedStorageDto } from "../dto/dedicated-storage.dto";
-import { EventEmitter2 } from "@nestjs/event-emitter";
+ import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+ import { Inject } from "@nestjs/common";
+ import { DatabaseService } from "../../database/service/database.service";
+ import { StorageDto } from "../dto/storage.dto";
+ import { DedicatedStorageDto } from "../dto/dedicated-storage.dto";
+ import { EventEmitter2 } from "@nestjs/event-emitter";
+ import { APP_CONFIG } from "../../config/config.constants";
+ import { AppConfigDto } from "../../config/dto/app-config.dto";
 
 type DeductionWaiter = {
     resolve: () => void;
@@ -35,12 +38,15 @@ export class InventoryService {
     private readonly knownAmounts = new Map<string, number>();
     private readonly locks = new Map<string, ResourceLock>();
     private readonly batchWindowMs: number;
+	private readonly auditLoggingEnabled: boolean;
 
     public constructor(
         private readonly databaseService: DatabaseService,
         private readonly eventEmitter: EventEmitter2,
+		 @Inject(APP_CONFIG) config: AppConfigDto,
     ) {
         this.batchWindowMs = Number(process.env.INVENTORY_BATCH_WINDOW_MS) || 100;
+		this.auditLoggingEnabled = config.UseMySQL;
     }
 
 	public async getInventory(clusterId: string): Promise<StorageDto[]> {
@@ -259,6 +265,9 @@ private logDeduction(
     succeeded: boolean,
     balanceAtEvent: number,
 ): Promise<void> {
+	 if (!this.auditLoggingEnabled) {
+       return Promise.resolve();
+    }
     return this.databaseService.deductionAuditLog
         .create({ data: { clusterId, ownerId, resourceId, totalCost, succeeded, balanceAtEvent } })
         .then(() => undefined)

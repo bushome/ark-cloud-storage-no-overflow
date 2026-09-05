@@ -8,21 +8,28 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
 var InventoryService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.InventoryService = void 0;
 const common_1 = require("@nestjs/common");
+const common_2 = require("@nestjs/common");
 const database_service_1 = require("../../database/service/database.service");
 const dedicated_storage_dto_1 = require("../dto/dedicated-storage.dto");
 const event_emitter_1 = require("@nestjs/event-emitter");
+const config_constants_1 = require("../../config/config.constants");
+const app_config_dto_1 = require("../../config/dto/app-config.dto");
 let InventoryService = InventoryService_1 = class InventoryService {
-    constructor(databaseService, eventEmitter) {
+    constructor(databaseService, eventEmitter, config) {
         this.databaseService = databaseService;
         this.eventEmitter = eventEmitter;
         this.logger = new common_1.Logger(InventoryService_1.name);
         this.knownAmounts = new Map();
         this.locks = new Map();
         this.batchWindowMs = Number(process.env.INVENTORY_BATCH_WINDOW_MS) || 100;
+        this.auditLoggingEnabled = config.UseMySQL;
     }
     async getInventory(clusterId) {
         const storage = [];
@@ -160,6 +167,9 @@ let InventoryService = InventoryService_1 = class InventoryService {
         this.emitInventoryUpdate(clusterId, dedicated_storage_dto_1.DedicatedStorageDto.fromDatabase(row));
     }
     logDeduction(clusterId, ownerId, resourceId, totalCost, succeeded, balanceAtEvent) {
+        if (!this.auditLoggingEnabled) {
+            return Promise.resolve();
+        }
         return this.databaseService.deductionAuditLog
             .create({ data: { clusterId, ownerId, resourceId, totalCost, succeeded, balanceAtEvent } })
             .then(() => undefined)
@@ -212,7 +222,9 @@ let InventoryService = InventoryService_1 = class InventoryService {
 exports.InventoryService = InventoryService;
 exports.InventoryService = InventoryService = InventoryService_1 = __decorate([
     (0, common_1.Injectable)(),
+    __param(2, (0, common_2.Inject)(config_constants_1.APP_CONFIG)),
     __metadata("design:paramtypes", [database_service_1.DatabaseService,
-        event_emitter_1.EventEmitter2])
+        event_emitter_1.EventEmitter2,
+        app_config_dto_1.AppConfigDto])
 ], InventoryService);
 //# sourceMappingURL=inventory.service.js.map

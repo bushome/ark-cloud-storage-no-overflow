@@ -1,6 +1,7 @@
 import { DatabaseService } from "../../database/service/database.service";
 import { StorageDto } from "../dto/storage.dto";
 import { EventEmitter2 } from "@nestjs/event-emitter";
+import { AppConfigDto } from "../../config/dto/app-config.dto";
 export declare class InventoryService {
     private readonly databaseService;
     private readonly eventEmitter;
@@ -8,7 +9,8 @@ export declare class InventoryService {
     private readonly knownAmounts;
     private readonly locks;
     private readonly batchWindowMs;
-    constructor(databaseService: DatabaseService, eventEmitter: EventEmitter2);
+    private readonly auditLoggingEnabled;
+    constructor(databaseService: DatabaseService, eventEmitter: EventEmitter2, config: AppConfigDto);
     getInventory(clusterId: string): Promise<StorageDto[]>;
     updateInventory(clusterId: string, storage: StorageDto): Promise<void>;
     private setDedicatedStorage;

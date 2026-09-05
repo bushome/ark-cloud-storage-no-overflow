@@ -24,13 +24,27 @@ const sqlite_client_1 = require("../../../generated/sqlite-client");
 const config_constants_1 = require("../../config/config.constants");
 const app_root_1 = require("../../config/app-root");
 const app_config_dto_1 = require("../../config/dto/app-config.dto");
+const SQLITE_INITIAL_SCHEMA_STATEMENTS = [
+    `CREATE TABLE "Cluster" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "secret" TEXT NOT NULL
+);`,
+    `CREATE TABLE "DedicatedStorage" (
+    "resourceId" TEXT NOT NULL,
+    "clusterId" TEXT NOT NULL,
+    "ownerId" INTEGER NOT NULL,
+    "amount" INTEGER NOT NULL,
+    PRIMARY KEY ("clusterId", "ownerId", "resourceId")
+);`,
+];
 let DatabaseService = DatabaseService_1 = class DatabaseService {
     constructor(config) {
         this.logger = new common_1.Logger(DatabaseService_1.name);
-        this.client = config.UseMySQL
+        this.isMySql = config.UseMySQL;
+        this.client = this.isMySql
             ? DatabaseService_1.buildMySqlClient(config)
             : DatabaseService_1.buildSqliteClient(config);
-        this.logger.log(config.UseMySQL
+        this.logger.log(this.isMySql
             ? `Database: MySQL/MariaDB at ${config.MySQL.Host}:${config.MySQL.Port}/${config.MySQL.Database}`
             : `Database: SQLite at ${DatabaseService_1.resolveSqliteFsPath(config.SQLite.File)}`);
         return new Proxy(this, {
@@ -67,8 +81,22 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
         const adapter = new adapter_better_sqlite3_1.PrismaBetterSQLite3({ url });
         return new sqlite_client_1.PrismaClient({ adapter });
     }
+    async ensureSqliteSchema() {
+        const client = this.client;
+        const existing = await client.$queryRawUnsafe(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'Cluster'`);
+        if (existing.length > 0) {
+            return;
+        }
+        this.logger.log('SQLite database is uninitialized — applying initial schema.');
+        for (const statement of SQLITE_INITIAL_SCHEMA_STATEMENTS) {
+            await client.$executeRawUnsafe(statement);
+        }
+    }
     async onModuleInit() {
         await this.client.$connect();
+        if (!this.isMySql) {
+            await this.ensureSqliteSchema();
+        }
     }
     async onModuleDestroy() {
         await this.client.$disconnect();
