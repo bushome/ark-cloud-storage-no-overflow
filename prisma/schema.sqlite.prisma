@@ -1,0 +1,43 @@
+generator client {
+       provider   = "prisma-client-js"
+       engineType = "client"
+       output     = "../generated/sqlite-client"
+}
+
+datasource db {
+    provider = "sqlite"
+    url = env("SQLITE_DATABASE_URL")
+}
+
+model Cluster {
+    id String
+    secret String
+    @@id([id])
+}
+
+model DedicatedStorage {
+    resourceId String
+    clusterId String
+    ownerId Int
+    amount Int
+    @@id([clusterId, ownerId, resourceId])
+}
+
+model DeductionAuditLog {
+  id             Int      @id @default(autoincrement())
+  clusterId      String
+  ownerId        Int
+  resourceId     String
+  totalCost      Int
+  succeeded      Boolean
+  balanceAtEvent Int
+  createdAt      DateTime @default(now())
+
+  @@index([ownerId, resourceId, createdAt])
+}
+
+model ResourceRateCeiling {
+  resourceId         String  @id
+  maxLegitRatePerSec Decimal
+  notes              String?
+}

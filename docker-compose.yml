@@ -1,0 +1,25 @@
+services:
+  db:
+    image: mysql
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - data:/var/lib/mysql
+    environment:
+      MYSQL_DATABASE: clouddb
+      MYSQL_ROOT_PASSWORD: your-db-password
+  api:
+    image: arkcloudstorage/api
+    restart: unless-stopped
+    depends_on:
+      - db
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      # config.json replaces the old DATABASE_URL/REGISTER_CLUSTERS env vars —
+      # both were removed when .env/@nestjs/config was retired from this fork.
+      # Mounted read-only; see config.json (docker) example alongside this file.
+      - ./config.json:/home/node/config.json:ro
+volumes:
+  data:
