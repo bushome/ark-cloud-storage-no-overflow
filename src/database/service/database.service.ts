@@ -1,5 +1,4 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { PrismaLibSQL } from '@prisma/adapter-libsql';
 // These come from the TWO generated clients (see prisma/schema.mysql.prisma
 // and prisma/schema.sqlite.prisma) — NOT two imports of the same client.
 // Prisma ties a generated client to a single datasource `provider`, so one
@@ -143,8 +142,33 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
    * onModuleInit() now (see below) instead of needing to run inside this
    * constructor to beat Nest's OnModuleInit ordering, which the previous
    * better-sqlite3-based version required.
+   *
+   * `@prisma/adapter-libsql` is required LAZILY here, not imported at the
+   * top of the file — mirroring buildMySqlClient's existing pattern for
+   * the exact same reason: keeps libSQL's native binary
+   * (@libsql/win32-x64-msvc etc.) out of the load path entirely for a
+   * MySQL-only runtime that never calls this method. Found the hard way
+   * (2026-09-06) via a real regression: an earlier version of this file
+   * imported PrismaLibSQL eagerly at the top, which worked fine under
+   * plain `node dist/main.js` (where node_modules is a real directory
+   * Node can resolve normally) but crashed clouddbSEA's bundled exe
+   * immediately on startup — `ERR_UNKNOWN_BUILTIN_MODULE: No such
+   * built-in module: @libsql/win32-x64-msvc` — even though clouddbSEA
+   * only ever runs UseMySQL: true and this method is never called. SEA's
+   * bundled require() can only resolve genuine Node built-ins, not native
+   * addon binaries pulled in via a top-level import; the eager import
+   * forced esbuild to bundle (and Node to attempt loading) libSQL's
+   * native binding the moment the bundle started, regardless of whether
+   * buildSqliteClient itself ever ran. This is the same
+   * SEA-can't-load-native-addons limitation already documented in the
+   * Standalone-Exe section as the reason SEA was never viable for the
+   * solo-player/SQLite target in the first place — better-sqlite3 hit it
+   * originally, and libSQL's own native binding hits the identical wall
+   * for the identical reason, just via an avoidable eager-import bug
+   * rather than an unavoidable one this time.
    */
   private static buildSqliteClient(config: AppConfigDto, fsPath: string): SqlitePrismaClient {
+    const { PrismaLibSQL } = require('@prisma/adapter-libsql');
     const configured = config.SQLite.File;
     // A user-supplied `file:` URL is passed through unchanged; a bare path
     // (the common case, including the default) gets the app-root-resolved

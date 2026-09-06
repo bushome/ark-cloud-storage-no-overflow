@@ -1,4 +1,4 @@
-import { createClient } from '@libsql/client';
+import type { Client as LibsqlClient } from '@libsql/client';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync } from 'fs';
 import { basename, dirname, join } from 'path';
 import { Logger } from '@nestjs/common';
@@ -61,7 +61,10 @@ function listBackups(fsPath: string): string[] {
  * comment below.
  */
 async function isSqliteFileValid(targetFsPath: string): Promise<boolean> {
-  let client: ReturnType<typeof createClient> | undefined;
+  // Lazily required — see ensureSqliteResilience's comment below for why
+  // this can't be a top-level import.
+  const { createClient } = require('@libsql/client');
+  let client: LibsqlClient | undefined;
   try {
     client = createClient({ url: `file:${targetFsPath}` });
     const result = await client.execute('PRAGMA quick_check');
@@ -128,6 +131,21 @@ async function restoreFromNewestValidBackup(fsPath: string): Promise<boolean> {
  * On a fresh/nonexistent file, the integrity check trivially passes
  * (nothing to check) — this still runs in that case purely to set WAL mode
  * on the file before its very first real write.
+ *
+ * IMPORTANT — `@libsql/client` is required LAZILY inside this function and
+ * inside isSqliteFileValid, never imported at the top of this file. Both
+ * DatabaseService and SqliteResilienceService import from this module
+ * unconditionally regardless of config.UseMySQL — a top-level
+ * `import { createClient } from '@libsql/client'` here would mean simply
+ * *loading* this module (which happens on every boot, MySQL or SQLite)
+ * pulls in libSQL's native binary, not just *calling* this function.
+ * Found the hard way (2026-09-06): this crashed clouddbSEA's bundled exe
+ * on startup with `ERR_UNKNOWN_BUILTIN_MODULE` even after the same fix
+ * was applied to database.service.ts's own PrismaLibSQL import, because
+ * this file's separate top-level import was the actual remaining culprit
+ * — SEA's bundled require() can only resolve genuine Node built-ins, not
+ * native addon binaries, regardless of which file's import statement
+ * triggers loading them.
  */
 export async function ensureSqliteResilience(fsPath: string): Promise<void> {
   mkdirSync(dirname(fsPath), { recursive: true });
@@ -142,11 +160,14 @@ export async function ensureSqliteResilience(fsPath: string): Promise<void> {
     }
   }
 
-  // Runs unconditionally (corrupted-and-restored, corrupted-and-not-
-  // restored, or already fine) — journal_mode is stored in the file's own
-  // header, so this is a cheap no-op once already set, and every
-  // subsequent connection (including Prisma's) inherits it with no extra
-  // wiring on Prisma's side.
+  // Lazily required — see the comment above this function for why this
+  // can't be a top-level import. Runs unconditionally below
+  // (corrupted-and-restored, corrupted-and-not-restored, or already
+  // fine) — journal_mode is stored in the file's own header, so this is
+  // a cheap no-op once already set, and every subsequent connection
+  // (including Prisma's) inherits it with no extra wiring on Prisma's
+  // side.
+  const { createClient } = require('@libsql/client');
   const client = createClient({ url: `file:${fsPath}` });
   try {
     await client.execute('PRAGMA journal_mode = WAL');

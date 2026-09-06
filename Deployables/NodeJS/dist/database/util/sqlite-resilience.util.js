@@ -3,7 +3,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.resolveSqliteFsPath = resolveSqliteFsPath;
 exports.ensureSqliteResilience = ensureSqliteResilience;
 exports.createBackupIfNeeded = createBackupIfNeeded;
-const client_1 = require("@libsql/client");
 const fs_1 = require("fs");
 const path_1 = require("path");
 const common_1 = require("@nestjs/common");
@@ -34,9 +33,10 @@ function listBackups(fsPath) {
         .map((name) => (0, path_1.join)(dir, name));
 }
 async function isSqliteFileValid(targetFsPath) {
+    const { createClient } = require('@libsql/client');
     let client;
     try {
-        client = (0, client_1.createClient)({ url: `file:${targetFsPath}` });
+        client = createClient({ url: `file:${targetFsPath}` });
         const result = await client.execute('PRAGMA quick_check');
         return result.rows.length > 0 && result.rows[0].quick_check === 'ok';
     }
@@ -74,7 +74,8 @@ async function ensureSqliteResilience(fsPath) {
                 'it may fail to open or may be missing data. Manual recovery may be required.');
         }
     }
-    const client = (0, client_1.createClient)({ url: `file:${fsPath}` });
+    const { createClient } = require('@libsql/client');
+    const client = createClient({ url: `file:${fsPath}` });
     try {
         await client.execute('PRAGMA journal_mode = WAL');
     }

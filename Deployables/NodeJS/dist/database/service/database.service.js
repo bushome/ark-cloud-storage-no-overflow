@@ -15,7 +15,6 @@ var DatabaseService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DatabaseService = void 0;
 const common_1 = require("@nestjs/common");
-const adapter_libsql_1 = require("@prisma/adapter-libsql");
 const sqlite_client_1 = require("../../../generated/sqlite-client");
 const config_constants_1 = require("../../config/config.constants");
 const app_config_dto_1 = require("../../config/dto/app-config.dto");
@@ -70,9 +69,10 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
         return new MySqlPrismaClientRuntime({ adapter });
     }
     static buildSqliteClient(config, fsPath) {
+        const { PrismaLibSQL } = require('@prisma/adapter-libsql');
         const configured = config.SQLite.File;
         const url = configured.startsWith('file:') ? configured : `file:${fsPath}`;
-        const adapter = new adapter_libsql_1.PrismaLibSQL({ url });
+        const adapter = new PrismaLibSQL({ url });
         return new sqlite_client_1.PrismaClient({ adapter });
     }
     async ensureSqliteSchema() {
