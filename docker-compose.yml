@@ -1,7 +1,8 @@
 services:
   db:
-    image: mysql
+    image: mariadb:11
     restart: unless-stopped
+    command: --skip-name-resolve
     ports:
       - "127.0.0.1:3306:3306"
     volumes:
