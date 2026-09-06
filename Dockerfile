@@ -1,7 +1,20 @@
 # Build Image
-FROM node:lts-alpine AS build
+#
+# Base image switched from node:lts-alpine to node:lts-slim (Debian, glibc)
+# on 2026-09-06 — @libsql/client's musl-targeted native binary
+# (@libsql/linux-x64-musl) has a confirmed, long-standing upstream bug
+# ("Error relocating .../index.node: fcntl64: symbol not found",
+# ERR_DLOPEN_FAILED — see tursodatabase/libsql-js#91 and
+# prisma/prisma#29114) that a libc6-compat shim does NOT fix, since the
+# musl-native build itself is broken, not merely a glibc binary running on
+# musl. Switching to a glibc base makes libSQL load its linux-x64-gnu
+# build instead, sidestepping the bug entirely. Verified working — see
+# CLAUDE.md's Docker section for the live-verification writeup.
+FROM node:lts-slim AS build
 
-RUN apk add --no-cache git
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=build
 
@@ -24,7 +37,7 @@ RUN npm run build && \
     npm prune --production
 
 # Run Image
-FROM node:lts-alpine
+FROM node:lts-slim
 
 ENV NODE_ENV=production
 

@@ -23,5 +23,6 @@ services:
       # both were removed when .env/@nestjs/config was retired from this fork.
       # Mounted read-only; see config.json (docker) example alongside this file.
       - ./config.json:/home/node/config.json:ro
+      - ./sqlite-data:/home/node/data
 volumes:
   data:
