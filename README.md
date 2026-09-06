@@ -22,7 +22,7 @@
 ```
 
 
-# Ark Cloud Storage API - No-Overflow Enforcement
+# Ark Ascended Cloud Storage API - No-Negatives Enforcement
 
 This is a variant of Florian Kostenzer's, <https://github.com/123FLO321>, work for the backend API <https://github.com/ark-cloud-storage/api> of their Cloud Storage mod <https://www.curseforge.com/ark-survival-ascended/mods/cloud-storage> on Curse Forge for the game Ark: Survival Ascended.
 
