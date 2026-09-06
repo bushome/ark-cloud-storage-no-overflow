@@ -35,7 +35,7 @@
         "@nestjs/platform-ws": "~11.1.6",
         "@nestjs/schedule": "^12.0.1",
         "@nestjs/websockets": "~11.1.6",
-        "@prisma/adapter-better-sqlite3": "6.17.1",
+        "@prisma/adapter-libsql": "6.17.1",
         "@prisma/adapter-mariadb": "6.17.1",
         "@prisma/client": "6.17.1",
         "boolean": "~3.2.0",
@@ -94,5 +94,11 @@
         ],
         "coverageDirectory": "../coverage",
         "testEnvironment": "node"
+    },
+    "allowScripts": {
+        "@prisma/client": true,
+        "@prisma/engines": true,
+        "prisma": true,
+        "unrs-resolver": true
     }
 }

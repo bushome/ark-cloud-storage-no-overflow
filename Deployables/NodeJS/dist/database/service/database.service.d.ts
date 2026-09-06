@@ -7,9 +7,9 @@ export declare class DatabaseService implements OnModuleInit, OnModuleDestroy {
     private readonly logger;
     private readonly client;
     private readonly isMySql;
+    private readonly sqliteFsPath;
     constructor(config: AppConfigDto);
     private static buildMySqlClient;
-    private static resolveSqliteFsPath;
     private static buildSqliteClient;
     private ensureSqliteSchema;
     onModuleInit(): Promise<void>;

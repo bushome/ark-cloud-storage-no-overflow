@@ -14,14 +14,12 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 var DatabaseService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DatabaseService = void 0;
-const fs_1 = require("fs");
-const path_1 = require("path");
 const common_1 = require("@nestjs/common");
-const adapter_better_sqlite3_1 = require("@prisma/adapter-better-sqlite3");
+const adapter_libsql_1 = require("@prisma/adapter-libsql");
 const sqlite_client_1 = require("../../../generated/sqlite-client");
 const config_constants_1 = require("../../config/config.constants");
-const app_root_1 = require("../../config/app-root");
 const app_config_dto_1 = require("../../config/dto/app-config.dto");
+const sqlite_resilience_util_1 = require("../util/sqlite-resilience.util");
 const SQLITE_INITIAL_SCHEMA_STATEMENTS = [
     `CREATE TABLE "Cluster" (
     "id" TEXT NOT NULL PRIMARY KEY,
@@ -39,12 +37,13 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
     constructor(config) {
         this.logger = new common_1.Logger(DatabaseService_1.name);
         this.isMySql = config.UseMySQL;
+        this.sqliteFsPath = this.isMySql ? null : (0, sqlite_resilience_util_1.resolveSqliteFsPath)(config.SQLite.File);
         this.client = this.isMySql
             ? DatabaseService_1.buildMySqlClient(config)
-            : DatabaseService_1.buildSqliteClient(config);
+            : DatabaseService_1.buildSqliteClient(config, this.sqliteFsPath);
         this.logger.log(this.isMySql
             ? `Database: MySQL/MariaDB at ${config.MySQL.Host}:${config.MySQL.Port}/${config.MySQL.Database}`
-            : `Database: SQLite at ${DatabaseService_1.resolveSqliteFsPath(config.SQLite.File)}`);
+            : `Database: SQLite (libSQL) at ${this.sqliteFsPath}`);
         return new Proxy(this, {
             get(target, prop, receiver) {
                 if (prop in target) {
@@ -70,15 +69,10 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
         });
         return new MySqlPrismaClientRuntime({ adapter });
     }
-    static resolveSqliteFsPath(configured) {
-        return configured.startsWith('file:') ? configured.slice('file:'.length) : (0, app_root_1.resolveAppPath)(configured);
-    }
-    static buildSqliteClient(config) {
+    static buildSqliteClient(config, fsPath) {
         const configured = config.SQLite.File;
-        const fsPath = DatabaseService_1.resolveSqliteFsPath(configured);
         const url = configured.startsWith('file:') ? configured : `file:${fsPath}`;
-        (0, fs_1.mkdirSync)((0, path_1.dirname)(fsPath), { recursive: true });
-        const adapter = new adapter_better_sqlite3_1.PrismaBetterSQLite3({ url });
+        const adapter = new adapter_libsql_1.PrismaLibSQL({ url });
         return new sqlite_client_1.PrismaClient({ adapter });
     }
     async ensureSqliteSchema() {
@@ -93,6 +87,9 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
         }
     }
     async onModuleInit() {
+        if (!this.isMySql) {
+            await (0, sqlite_resilience_util_1.ensureSqliteResilience)(this.sqliteFsPath);
+        }
         await this.client.$connect();
         if (!this.isMySql) {
             await this.ensureSqliteSchema();

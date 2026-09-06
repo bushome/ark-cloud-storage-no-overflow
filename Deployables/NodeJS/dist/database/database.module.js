@@ -9,12 +9,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.DatabaseModule = void 0;
 const common_1 = require("@nestjs/common");
 const database_service_1 = require("./service/database.service");
+const sqlite_resilience_service_1 = require("./service/sqlite-resilience.service");
 let DatabaseModule = class DatabaseModule {
 };
 exports.DatabaseModule = DatabaseModule;
 exports.DatabaseModule = DatabaseModule = __decorate([
     (0, common_1.Module)({
-        providers: [database_service_1.DatabaseService],
+        providers: [database_service_1.DatabaseService, sqlite_resilience_service_1.SqliteResilienceService],
         exports: [database_service_1.DatabaseService],
     })
 ], DatabaseModule);
