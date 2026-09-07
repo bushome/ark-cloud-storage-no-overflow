@@ -91,7 +91,10 @@ Drop a `config.json` next to the compiled app (`dist/main.js`) with your MySQL c
 }
 ```
 
-**If you skip this, the app won't error on `MySQL` — it'll quietly default to a local SQLite file instead of your MySQL database.** That's intentional zero-config behavior for solo players (see below), but it means an existing MySQL self-hoster who forgets this file won't get an obvious failure, just a quietly empty new database. Double-check this file is actually in place before you trust a fresh install. Note that `MySQL.User`, `MySQL.Password`, and `MySQL.Database` are hard-required with no safe default if `UseMySQL: true` — the app will fail validation loudly on boot if these are missing, rather than silently proceeding. `Auth.RegisterClusters` has no such requirement — see the SQLite section below and the Installation steps for how to register a cluster with zero pre-configuration.
+There are two different "missing config" situations worth keeping separate here:
+
+- **No `config.json` at all, or `UseMySQL` left `false`/unset**: the app quietly defaults to a local SQLite file instead of erroring. That's intentional zero-config behavior for solo players (see below) — but it also means an existing MySQL self-hoster who simply forgets to drop this file in won't get an obvious failure on boot, just a quietly empty new SQLite database sitting where they expected MySQL. Worth double-checking this file is actually in place before you trust a fresh install.
+- **`UseMySQL: true`, but `MySQL.User`/`MySQL.Password`/`MySQL.Database` missing**: the opposite behavior — the app fails validation loudly on boot rather than silently proceeding with blank credentials. `Auth.RegisterClusters` has no such requirement and can be left empty entirely — see the SQLite section below and the Installation steps for how to register a cluster with zero pre-configuration.
 
 `ConnectionLimit` is this project's own pool-size knob — the equivalent of upstream's `?connection_limit=N` on `DATABASE_URL`, if you're coming from there. It's optional: leave it out and the `mariadb` driver's own default (10) applies instead. Large clusters will likely want it set explicitly — `50` is what this project's own production cluster runs with, given multiple crafting stations hitting the same box concurrently.
 
@@ -103,7 +106,7 @@ Alongside MySQL/MariaDB, this variant can now run on a local SQLite file instead
 
 If `config.json` is missing entirely, this is the default: a SQLite file gets created at `./data/cloudstorage.db` (relative to wherever `main.js` actually is), and there's nothing else to configure. To use MySQL instead, see the `config.json` example above (`"UseMySQL": true` plus your connection details) — the reverse also holds, `"UseMySQL": false` (or no `config.json` at all) gets you SQLite.
 
-`Server.Port`, cluster auto-registration (`Auth.RegisterClusters`), batch-window tuning (`Inventory.BatchWindowMs`), audit-log settings (`AuditLog.RetentionDays`, `AuditLog.DiscordWebhook`), and verbose logging (`Logging.Verbose`) are all fully wired to `config.json` now — no `.env` fallback exists anywhere in the running app. Optional settings fall back to sensible built-in defaults if omitted; only MySQL's connection credentials are hard-required with no safe default, and only when UseMySQL: true — Auth.RegisterClusters can be left empty entirely; register a cluster after boot via POST /auth/register instead.
+`Server.Port`, cluster auto-registration (`Auth.RegisterClusters`), batch-window tuning (`Inventory.BatchWindowMs`), audit-log settings (`AuditLog.RetentionDays`, `AuditLog.DiscordWebhook`), and verbose logging (`Logging.Verbose`) are all fully wired to `config.json` now, with sensible built-in defaults if omitted (see the config.json section above for the one exception, MySQL's connection credentials). `Auth.RegisterClusters` can be left empty entirely — register a cluster after boot instead via `POST /auth/register`.
 
 ### Database engine: Prisma driver adapters (no more native binary)
 
