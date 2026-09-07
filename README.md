@@ -66,9 +66,9 @@ There have also been several backend performance improvements. And will list the
 
 - Closed sockets are not written; empty cluster sets are removed.
 
-### Database connection: now via config.json, not .env (READ THIS IF UPGRADING)
+### Configuration: config.json
 
-**Breaking change if you're upgrading from an earlier version of this variant.** The running app no longer reads `DATABASE_URL`, or any `.env` file at all — `.env` and `@nestjs/config` have been removed from the project entirely. All runtime configuration, including database connection details, now comes from `config.json`.
+This variant is configured entirely via `config.json` — no `.env` file, no `DATABASE_URL`, no `@nestjs/config` dependency anywhere in the project. If you're coming from upstream's `.env`-based setup, this is the one thing to unlearn; everything below assumes `config.json` from the start.
 
 Drop a `config.json` next to the compiled app (`dist/main.js`) with your MySQL connection details:
 
@@ -91,11 +91,11 @@ Drop a `config.json` next to the compiled app (`dist/main.js`) with your MySQL c
 }
 ```
 
-**If you skip this, the app won't error on `MySQL` — it'll quietly default to a local SQLite file instead of your MySQL database.** That's intentional zero-config behavior for solo players (see below), but it means an existing MySQL self-hoster who forgets this step after upgrading won't get an obvious failure, just a quietly empty new database. Double-check this file is actually in place before you trust an upgrade. Note that MySQL.User, MySQL.Password, and MySQL.Database are hard-required with no safe default if UseMySQL: true — the app will fail validation loudly on boot if these are missing, rather than silently proceeding. Auth.RegisterClusters has no such requirement — see the SQLite section below and the Installation steps for how to register a cluster with zero pre-configuration.
+**If you skip this, the app won't error on `MySQL` — it'll quietly default to a local SQLite file instead of your MySQL database.** That's intentional zero-config behavior for solo players (see below), but it means an existing MySQL self-hoster who forgets this file won't get an obvious failure, just a quietly empty new database. Double-check this file is actually in place before you trust a fresh install. Note that `MySQL.User`, `MySQL.Password`, and `MySQL.Database` are hard-required with no safe default if `UseMySQL: true` — the app will fail validation loudly on boot if these are missing, rather than silently proceeding. `Auth.RegisterClusters` has no such requirement — see the SQLite section below and the Installation steps for how to register a cluster with zero pre-configuration.
 
-`ConnectionLimit` is the direct replacement for the old `.env`/`DATABASE_URL`'s `?connection_limit=N` — same pool-size knob, own field now. It's optional: leave it out and the `mariadb` driver's own default (10) applies instead. Large clusters will likely want it set explicitly — `50` is what this project's own production cluster runs with, given multiple crafting stations hitting the same box concurrently.
+`ConnectionLimit` is this project's own pool-size knob — the equivalent of upstream's `?connection_limit=N` on `DATABASE_URL`, if you're coming from there. It's optional: leave it out and the `mariadb` driver's own default (10) applies instead. Large clusters will likely want it set explicitly — `50` is what this project's own production cluster runs with, given multiple crafting stations hitting the same box concurrently.
 
-**Note for `prisma generate`/schema tooling specifically**: unlike the running app, the Prisma CLI itself doesn't require a `DATABASE_URL` or `.env` file to be present at all — `npm run prisma:generate` works cleanly with neither, confirmed directly.
+**Note for `prisma generate`/schema tooling specifically**: the Prisma CLI itself doesn't need a `DATABASE_URL` or `.env` file either — `npm run prisma:generate` works cleanly with neither, confirmed directly.
 
 ### New: SQLite as an alternative to MySQL
 
