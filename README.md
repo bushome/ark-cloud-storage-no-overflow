@@ -50,7 +50,7 @@ There have also been several backend performance improvements. And will list the
 
 - Crafting traffic: One DB write per websocket update -> configurable coalesce write queue per clusterId:ownerId:resourceId (100ms by default, tune with `Inventory.BatchWindowMs` in `config.json`). Batch jobbing. Crafts (IE withdraw requests) and deposits also never overlap on the same row.
 
-  Widening this reduces (but doesn't eliminate) duplication overage under heavy concurrent load — it's a tuning knob, not a fix, and legitimate crafts start stalling if you push it too far. Values above ~250ms required manual craft restarts in my own testing.
+  Widening this does **not** reduce or eliminate duplication overage — that protection comes entirely from the atomic deduction gate (`amount >= cost`, checked inside a transaction), which holds overage at exactly zero regardless of this setting. All widening the window does is trade responsiveness for a slightly wider staleness margin, with legitimate crafts starting to stall/flicker past ~250ms in testing (confirmed via a batch-window sweep across 100/250/500/1000ms) — no corresponding benefit. Leave this at the 100ms default unless you have a specific latency reason to change it.
 
 - Post-write amount: Prisma returns the row -> read from cached memory variable, no SELECT. If the cache already knows there isn't enough, the craft fails immediately with Insufficient resources and does not touch MySQL. A deposit flushes any pending batch first, then increments. The cache is set from the upsert row, so the box can accept items while stations are still requesting.
 
@@ -107,9 +107,11 @@ If `config.json` is missing entirely, this is the default: a SQLite file gets cr
 
 ### Database engine: Prisma driver adapters (no more native binary)
 
-The Prisma client now runs on `@prisma/adapter-mariadb` (MySQL/MariaDB) and `@prisma/adapter-better-sqlite3` (SQLite) with `engineType = "client"` set in the schema's generator block, instead of Prisma's default native query-engine binary.
+The Prisma client now runs on `@prisma/adapter-mariadb` (MySQL/MariaDB) and `@prisma/adapter-libsql` (SQLite) with `engineType = "client"` set in the schema's generator block, instead of Prisma's default native query-engine binary.
 
 Why this matters: that native binary (`query_engine-*.dll.node` on Windows) is a platform-specific compiled file that has to get regenerated in place every time you run `prisma generate` — and it can fail with a file-locking error if the app's still running when you try. Its per-platform nature was also a real headache for the drop-in-exe goal mentioned at the bottom of this readme. Switching to the driver adapter gets rid of the binary entirely; the query engine now runs as plain TypeScript/WASM.
+
+**Note if you're familiar with an earlier version of this project:** the SQLite side originally ran on `@prisma/adapter-better-sqlite3`. That was migrated to `@prisma/adapter-libsql` after `better-sqlite3`'s native addon turned out to have a severe, reliably-reproducing crash under current Node versions (a Node core change interacting badly with `better-sqlite3`'s legacy native-binding pattern). `@libsql/client`'s bindings use the modern, ABI-stable N-API instead, which sidesteps the entire bug class. `better-sqlite3` is no longer a dependency anywhere in this project.
 
 *The above are just the basics I'm starting with....check the change notes on releases for functional changes going foreward. Anything else I haven't touched is just a re-upload of Florian's work and will have no differences from the originals as seen from their repo.*
 
@@ -163,7 +165,7 @@ Full transparency on a couple of things worth knowing before you deploy this:
 
 - **Update (post-v93.15 patch): this project's own mitigation now holds overage at zero, while native/unsynced storage got significantly worse.** The paragraph above described pre-patch behavior, where cloud-synced storage widened the race window compared to vanilla or other mods' dedicated storage. That's no longer the picture. Following ARK's v93.15 patch, retesting showed the *native, unsynced* race got substantially worse — vanilla and Cyber Structures dedicated storage both now show clean-run overage in the ~15-20% range (roughly 8-10x the old ~2% baseline), with no meaningful difference between them. Meanwhile, the cloud-synced, API-routed path — the one actively protected by this project's atomic `updateMany(amount >= cost)` gate plus per-resource serialization — held at **exactly the expected amount, zero overage**, confirmed identical whether running as the packaged SEA executable or plain `node dist/main.js`. In short: as of the current ARK patch, this project's mitigation is doing real, measurable work, and running without it (vanilla/other dedicated storage) is now considerably riskier than it was when the paragraph above was originally written.
 
-- The mod developer is aware of both of these and is working on backend/mod-side changes of his own — I'm holding off on a bigger rework here (audit log redesign, revisiting the clamp behavior) until that lands.
+- The mod developer is aware of both of these. Whatever engine-side changes he ships in the future can be incorporated then, but nothing about this project's current mitigation depends on that happening first — the atomic deduction gate already holds overage at exactly zero regardless of how the underlying engine race behaves. No further rework (audit-log redesign, revisiting the clamp behavior) is currently planned on that basis.
 
 ## INSTALLATION
 
@@ -172,10 +174,19 @@ See wiki -> <https://github.com/bushome/ark-cloud-storage-no-overflow/wiki> for 
 After pulling this variant's changes, there's a couple extra steps beyond the base install:
 
 1. **MySQL/MariaDB only**: run the included `migration.sql` against your database (same as the base install process). **Not needed for SQLite** — the SQLite path automatically creates its own schema on first boot if the database file is fresh/empty.
-2. `npm install` — pulls in the new dependencies (`@nestjs/schedule`, `@prisma/adapter-mariadb`, `@prisma/adapter-better-sqlite3`).
+2. `npm install` — pulls in the new dependencies (`@nestjs/schedule`, `@prisma/adapter-mariadb`, `@prisma/adapter-libsql`, `@libsql/client`).
 3. `npm run prisma:generate` — generates **both** the MySQL and SQLite Prisma clients (this variant needs both regardless of which one you actually run, since they're two separate generated clients under the hood). No `.env` or `DATABASE_URL` needed for this step.
 4. Configure `config.json` next to the compiled app — see "Database connection: now via config.json, not .env" above for the full example. If using MySQL, you need `MySQL.User`/`Password`/`Database` filled in; those have no safe default and validation will fail loudly if missing. `Auth.RegisterClusters` is genuinely optional — leave it empty (or skip `config.json` entirely) and register a cluster after first boot instead via `POST /auth/register`; `Inventory.BatchWindowMs`, `AuditLog.RetentionDays`, and `AuditLog.DiscordWebhook` are all optional too and fall back to defaults if omitted.
 
 **Don't run `npx prisma migrate dev`.** This project applies schema changes via `migration.sql` directly rather than through Prisma's own migration history — running `migrate dev` against an existing install will report schema drift and offer to reset your database. Decline it; it isn't necessary and you will lose your data.
 
-A precompiled, ready-to-run distributable (no build step required) is available in this repo's `Deployables/NodeJS/` folder for the MySQL/cluster-operator case — just needs `config.json` filled in with your connection details, same as any other install. A true single-file Windows executable (no Node.js install required at all) is also confirmed working end-to-end for the MySQL/cluster-operator target, packaged via Node's own Single Executable Applications feature — not yet the default recommended install path while some packaging/cutover details get finalized, but functional today if you want to try it. A solo-player/SQLite-specific drop-in executable (fully self-contained, zero setup) is planned but not yet built — SQLite's native database driver can't be bundled the same way, so that one needs a different packaging approach that's still in the design stage.
+A precompiled, ready-to-run distributable (no build step required) is available in this repo's `Deployables/NodeJS/` folder for the MySQL/cluster-operator case — just needs `config.json` filled in with your connection details, same as any other install.
+
+Beyond that, this project now ships two standalone Windows executables, both built and verified end-to-end, not just proof-of-concept:
+
+- **Cluster operator / MySQL**: a true single-file executable via Node's own Single Executable Applications feature, paired with a small watchdog process that automatically relaunches it if it ever crashes. This is confirmed running in production on this project's own 12+ server cluster.
+- **Solo player / SQLite**: a self-extracting launcher (embedded portable Node runtime, no separate Node.js install needed) that generates its own cluster credentials on first run and prints a ready-to-paste config block into your console every time you launch it. Includes automatic rolling backups and corruption recovery for its own database — see the wiki for details.
+
+Pre-packaged downloads for all four install paths (Docker, MySQL/MariaDB standalone exe, plain NodeJS, and SQLite/solo-player standalone exe) are available under this repo's Releases — see the wiki for the platform-specific walkthrough for each.
+
+Also included in every download: `clouddb-remap-player`, a standalone recovery tool (Windows and Linux binaries both included) for relinking a player's stored resources to a new PlayerId after a lost/replaced character — see the [Recovering a Lost or New Character wiki page](https://github.com/bushome/ark-cloud-storage-no-overflow/wiki/Recovering-a-Lost-or-New-Character) for full usage.
