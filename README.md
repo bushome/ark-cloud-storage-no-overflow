@@ -40,7 +40,7 @@ The API **will not allow a negative balance to be written**. If a request attemp
 
 Basically, once you're out, you're out. No getting resources on "credit" with zero down and zero interest. Go Farmy Farmy like the rest of us.....slacker....kidding...not really. :P
 
-There's also a fix for a cross-cluster auth race that's still present in the upstream repo (`auth.guard.ts`, in their `gurad` folder typo and all) — `clusterId` was being stashed via `Reflect`/`SetMetadata` on a shared handler function instead of per-request state, which is exactly the kind of thing that gets weird under concurrent load from multiple clusters hitting the same instance. Fixed here.
+There's also a fix for a cross-cluster auth race that's still present in the upstream repo (`auth.guard.ts`, in their `gurad` folder typo and all) — `clusterId` was being stashed via `Reflect`/`SetMetadata` on a shared handler function instead of per-request state, which is exactly the kind of thing that gets weird under concurrent load from multiple clusters hitting the same instance. Fixed here and fixed upstream in production just hasn't hit the public facing repo yet.
 
 # Backend Performance Changes
 
