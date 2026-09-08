@@ -137,10 +137,6 @@ The Prisma client now runs on `@prisma/adapter-mariadb` (MySQL/MariaDB) and `@pr
 
 Why this matters: that native binary (`query_engine-*.dll.node` on Windows) is a platform-specific compiled file that has to get regenerated in place every time you run `prisma generate` — and it can fail with a file-locking error if the app's still running when you try. Its per-platform nature was also a real headache for the drop-in-exe goal mentioned at the bottom of this readme. Switching to the driver adapter gets rid of the binary entirely; the query engine now runs as plain TypeScript/WASM.
 
-**Note if you're familiar with an earlier version of this project:** the SQLite side originally ran on `@prisma/adapter-better-sqlite3`. That was migrated to `@prisma/adapter-libsql` after `better-sqlite3`'s native addon turned out to have a severe, reliably-reproducing crash under current Node versions (a Node core change interacting badly with `better-sqlite3`'s legacy native-binding pattern). `@libsql/client`'s bindings use the modern, ABI-stable N-API instead, which sidesteps the entire bug class. `better-sqlite3` is no longer a dependency anywhere in this project.
-
-*The above are just the basics I'm starting with....check the change notes on releases for functional changes going foreward. Anything else I haven't touched is just a re-upload of Florian's work and will have no differences from the originals as seen from their repo.*
-
 ## Deduction Audit Log
 
 There's also a new audit-log system that isn't in upstream at all: every deduction attempt (success or fail) gets logged, along with a per-resource "theoretical max consumption rate" ceiling. A scheduled job checks recent activity against that ceiling and can fire a Discord webhook (`AuditLog.DiscordWebhook` in `config.json`, optional — if you don't set it, findings still show up in the app's own log) if something blows past what's physically possible for a single crafting structure to produce, even accounting for crafting-skill stat, ClockFace multipliers, and buffs.
