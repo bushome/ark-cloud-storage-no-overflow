@@ -26,6 +26,8 @@
 
 This is a variant of Florian Kostenzer's, <https://github.com/123FLO321>, work for the backend API <https://github.com/ark-cloud-storage/api> of their Cloud Storage mod <https://www.curseforge.com/ark-survival-ascended/mods/cloud-storage> on Curse Forge for the game Ark: Survival Ascended.
 
+BEFORE ANYTHING ELSE KEEP IN MIND THIS IS NOT OFFICIALLY SUPPORTED BY THE ORIGINAL AUTHOR. YOU ACCEPT ANY AND ALL RISK USING ANY PART OF THIS PROJECT FOR YOUR USE. THAT SAID, READ BELOW.....
+
 ## API Variant Differences
 
 This project exists because of scale. A database engine like **MariaDB** can handle a lot of transactions, but the volume adds up fast on a large cluster — think **50–70 active players per server across 12+ servers**, with multiple players simultaneously crafting, depositing, and withdrawing resources, plus other plugins also querying the same database. Once you have enough concurrent activity, that traffic can start causing real performance issues and server lag, particularly around storage containers and crafting systems. The changes below aim to change that: behave like base ARK's storage system rather than allowing an "overdrawn" balance, and scale better for larger clusters in the process.
@@ -38,7 +40,7 @@ The API **will not allow a negative balance to be written**. If a request attemp
 
 Basically, once you're out, you're out. No getting resources on "credit" with zero down and zero interest. Go Farmy Farmy like the rest of us.....slacker....kidding...not really. :P
 
-There's also a fix for a cross-cluster auth race that's still present in the upstream repo (`auth.guard.ts`, in their `gurad` folder typo and all) — `clusterId` was being stashed via `Reflect`/`SetMetadata` on a shared handler function instead of per-request state, which is exactly the kind of thing that gets weird under concurrent load from multiple clusters hitting the same instance. Fixed here.
+There's also a fix for a cross-cluster auth race that's still present in the upstream repo (`auth.guard.ts`, in their `gurad` folder typo and all) — `clusterId` was being stashed via `Reflect`/`SetMetadata` on a shared handler function instead of per-request state, which is exactly the kind of thing that gets weird under concurrent load from multiple clusters hitting the same instance. Fixed here and fixed upstream in production just hasn't hit the public facing repo yet.
 
 # Backend Performance Changes
 
