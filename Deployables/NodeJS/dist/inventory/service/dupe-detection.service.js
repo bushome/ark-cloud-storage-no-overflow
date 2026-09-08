@@ -50,6 +50,10 @@ let DupeDetectionService = DupeDetectionService_1 = class DupeDetectionService {
         }
     }
     async pruneOldAuditLogs() {
+        if (!this.config.UseMySQL) {
+            this.logger.debug("Skipping audit log pruning — no DeductionAuditLog table on the SQLite backend");
+            return;
+        }
         const cutoff = new Date(Date.now() - 1000 * 60 * 60 * 24 * this.retentionDays);
         const result = await this.databaseService.deductionAuditLog.deleteMany({
             where: { createdAt: { lt: cutoff } },

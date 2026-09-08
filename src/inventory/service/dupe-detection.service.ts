@@ -61,6 +61,17 @@ public async checkForSuspiciousBursts(): Promise<void> {
     // Prunes the deduction log at a given interval to avoid bloat
     @Cron(CronExpression.EVERY_DAY_AT_3AM)
     public async pruneOldAuditLogs(): Promise<void> {
+        // Same reasoning as checkForSuspiciousBursts above — DeductionAuditLog
+        // doesn't exist under the trimmed SQLite schema (Cluster and
+        // DedicatedStorage only; see CLAUDE.md's "Zero-Config SQLite Never
+        // Actually Applied a Schema" section), so there's nothing to prune
+        // on the solo-player/SQLite target. Without this guard,
+        // databaseService.deductionAuditLog is undefined under SQLite,
+        // producing a TypeError on every 3am run.
+        if (!this.config.UseMySQL) {
+            this.logger.debug("Skipping audit log pruning — no DeductionAuditLog table on the SQLite backend");
+            return;
+        }
         const cutoff = new Date(Date.now() - 1000 * 60 * 60 * 24 * this.retentionDays);
         const result = await this.databaseService.deductionAuditLog.deleteMany({
             where: { createdAt: { lt: cutoff } },
