@@ -32,7 +32,7 @@ BEFORE ANYTHING ELSE KEEP IN MIND THIS IS NOT OFFICIALLY SUPPORTED BY THE ORIGIN
 
 | | Upstream | This Fork |
 |---|---|---|
-| Negative balances | Allowed, requires re-deposit before crafting resumes. This is an intentional feature/design design upstream, not a bug. Don't assume as such. | Clamped to zero, matching vanilla ARK — see tradeoffs below |
+| Negative balances | Allowed, requires re-deposit before crafting resumes. This is an intentional feature/design descision upstream, not a bug. Don't assume as such. | Clamped to zero, matching vanilla ARK — see tradeoffs below |
 | Cross-cluster auth race | Present (`SetMetadata`/`Reflect` on shared handler state) | Fixed (per-connection state) — reported upstream, not yet in their public repo |
 | Deduction handling | One unconditional `upsert` per WebSocket message | Per-resource locking, configurable batch coalescing, in-memory fast-fail cache, atomic `amount >= cost` gate |
 | Duplication-race mitigation | None | Atomic gate holds overage at exactly 0%, confirmed under real stress testing on both supported database backends |
