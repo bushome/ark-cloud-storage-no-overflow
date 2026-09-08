@@ -28,6 +28,25 @@ This is a variant of Florian Kostenzer's, <https://github.com/123FLO321>, work f
 
 BEFORE ANYTHING ELSE KEEP IN MIND THIS IS NOT OFFICIALLY SUPPORTED BY THE ORIGINAL AUTHOR. YOU ACCEPT ANY AND ALL RISK USING ANY PART OF THIS PROJECT FOR YOUR USE. THAT SAID, READ BELOW.....
 
+## At a Glance
+
+| | Upstream | This Fork |
+|---|---|---|
+| Negative balances | Allowed, requires re-deposit before crafting resumes | Clamped to zero, matching vanilla ARK — see tradeoffs below |
+| Cross-cluster auth race | Present (`SetMetadata`/`Reflect` on shared handler state) | Fixed (per-connection state) — reported upstream, not yet in their public repo |
+| Deduction handling | One unconditional `upsert` per WebSocket message | Per-resource locking, configurable batch coalescing, in-memory fast-fail cache, atomic `amount >= cost` gate |
+| Duplication-race mitigation | None | Atomic gate holds overage at exactly 0%, confirmed under real stress testing on both supported database backends |
+| Audit/dupe logging | None | Full deduction audit log + rate-ceiling burst detection (MySQL target only) |
+| Config | `.env` / `DATABASE_URL` | `config.json`, validated |
+| Database backends | MySQL/MariaDB only | MySQL/MariaDB or SQLite, selected at runtime |
+| Prisma engine | Native query-engine binary | Driver adapters, no native binary |
+| SQLite crash resilience | N/A | WAL mode, scheduled backups, boot-time integrity check + auto-restore |
+| Deployment options | Docker | Docker, Windows standalone exe (MySQL + SQLite targets), plain Node.js |
+| Crash supervision | None | Watchdog process with automatic restart |
+| Lost-character recovery | Manual | Standalone cross-platform tool included |
+
+Full detail and reasoning for each of these — including the honest tradeoffs — below.
+
 ## API Variant Differences
 
 This project exists because of scale. A database engine like **MariaDB** can handle a lot of transactions, but the volume adds up fast on a large cluster — think **50–70 active players per server across 12+ servers**, with multiple players simultaneously crafting, depositing, and withdrawing resources, plus other plugins also querying the same database. Once you have enough concurrent activity, that traffic can start causing real performance issues and server lag, particularly around storage containers and crafting systems. The changes below aim to change that: behave like base ARK's storage system rather than allowing an "overdrawn" balance, and scale better for larger clusters in the process.
